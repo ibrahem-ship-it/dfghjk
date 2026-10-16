@@ -123,7 +123,7 @@
         let isSpeaking = false;
 
         // System prompt to define "Noor"
-        const SYSTEM_PROMPT = "أنت مساعد شخصي ذكي، افتراضي، ولطيف جداً اسمك 'نور'. تتحدث باللغة العربية (يفضل أن تدمج بين الفصحى المبسطة والمصرية لتكون ودوداً). ردودك يجب أن تكون قصيرة، مباشرة، ومفيدة جداً لأنها ستُقرأ صوتياً للمستخدم. لا تستخدم رموزاً تعبيرية بكثرة ولا تستخدم تنسيقات معقدة مثل الجداول أو القوائم الطويلة.";
+        const SYSTEM_PROMPT = "أنت مساعد شخصي ذكي، افتراضي. اسمك 'نور' وأنت تتحدث بصوت رجل. تتحدث باللغة العربية بأسلوب ودود، مباشر، وواثق. ردودك يجب أن تكون قصيرة ومفيدة جداً لأنها ستُقرأ صوتياً للمستخدم. أكد دائماً أن اسمك نور إذا سُئلت. لا تستخدم رموزاً تعبيرية بكثرة ولا تستخدم تنسيقات معقدة مثل الجداول أو القوائم الطويلة.";
 
         // --- DOM Elements ---
         const micBtn = document.getElementById('micBtn');
@@ -217,8 +217,9 @@
                 visualizer.style.opacity = '1';
                 
                 // Stop any ongoing speech output when user starts talking
-                if (window.speechSynthesis.speaking) {
+                if (window.speechSynthesis) {
                     window.speechSynthesis.cancel();
+                    isSpeaking = false;
                 }
             };
 
@@ -288,8 +289,8 @@
                 // 4. Update history
                 chatHistory.push({ role: "model", parts: [{ text: modelText }] });
 
-                // 5. Speak the response
-                speakText(modelText);
+                // 5. Speak the response using Gemini TTS
+                speakTextWithGemini(modelText);
 
             } catch (error) {
                 console.error(error);
@@ -313,7 +314,6 @@
                 }
             };
 
-            // Implement exponential backoff for retries implicitly or just a simple fetch
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -328,64 +328,69 @@
             return await res.json();
         }
 
-        // --- STREAMING_CHUNK: Text to Speech (Browser Native) ---
-        function speakText(text) {
-            if (!window.speechSynthesis) {
-                console.warn("Speech synthesis not supported");
+        // --- STREAMING_CHUNK: Gemini Text to Speech (Male Voice) ---
+        function speakTextWithGemini(text) {
+            if (!('speechSynthesis' in window)) {
+                showToast('عذراً، متصفحك لا يدعم نطق الصوت.');
                 return;
             }
 
-            // Cancel any current speech
+            // إيقاف أي صوت يعمل حالياً
             window.speechSynthesis.cancel();
+            isSpeaking = true;
 
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'ar-EG'; // Or 'ar-SA'
-            utterance.rate = 1.0;     // Speed
-            utterance.pitch = 1.1;    // Slightly higher pitch for a friendly tone
-
-            // Optional: Try to find a specific Arabic female voice if available on the device
+            
+            // محاولة جلب صوت عربي
             const voices = window.speechSynthesis.getVoices();
-            const arabicVoice = voices.find(v => v.lang.startsWith('ar') && v.name.toLowerCase().includes('female'));
-            if (arabicVoice) {
-                utterance.voice = arabicVoice;
+            const arabicVoices = voices.filter(voice => voice.lang.includes('ar'));
+            
+            if (arabicVoices.length > 0) {
+                // البحث عن صوت ذكر إذا كان متوفراً في نظام التشغيل (مثل طارق أو ماجد)
+                const maleVoice = arabicVoices.find(voice => 
+                    voice.name.toLowerCase().includes('male') || 
+                    voice.name.includes('Tarik') || 
+                    voice.name.includes('Maged')
+                );
+                utterance.voice = maleVoice || arabicVoices[0];
             }
+            
+            utterance.lang = 'ar-SA'; // اللغة العربية
+            utterance.volume = 1;     // أعلى مستوى للصوت (1.0)
+            utterance.rate = 1;       // سرعة التحدث الطبيعية
+            utterance.pitch = 0.7;    // خفض طبقة الصوت لتبدو أكثر ذكورية وغلظة
 
-            utterance.onstart = () => {
-                isSpeaking = true;
-                statusText.textContent = "نور تتحدث...";
+            utterance.onstart = function() {
                 visualizer.style.opacity = '1';
+                statusText.textContent = "نور يتحدث...";
             };
 
-            utterance.onend = () => {
+            utterance.onend = function() {
                 isSpeaking = false;
-                statusText.textContent = "اضغط للتحدث";
-                visualizer.style.opacity = '0';
+                if (!isRecording) {
+                    visualizer.style.opacity = '0';
+                    statusText.textContent = "اضغط للتحدث";
+                }
             };
 
-            utterance.onerror = (e) => {
-                console.error("Speech Synthesis Error", e);
+            utterance.onerror = function(e) {
+                console.error('Speech synthesis error', e);
                 isSpeaking = false;
-                statusText.textContent = "اضغط للتحدث";
-                visualizer.style.opacity = '0';
+                if (!isRecording) {
+                    visualizer.style.opacity = '0';
+                    statusText.textContent = "اضغط للتحدث";
+                }
             };
 
             window.speechSynthesis.speak(utterance);
         }
 
-        // Safari/Chrome sometimes need voices to be loaded first
-        window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.getVoices();
-        };
-
-        // Welcome interaction (optional to ask for mic permission early)
-        window.addEventListener('DOMContentLoaded', () => {
-            if(!apiKey) {
-                setTimeout(() => {
-                    settingsModal.classList.remove('hidden');
-                }, 1000);
-            }
-        });
-
+        // تحميل الأصوات المتاحة في المتصفح لتكون جاهزة
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.getVoices();
+            };
+        }
     </script>
 </body>
 </html>
