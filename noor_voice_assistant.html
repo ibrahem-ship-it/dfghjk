@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نور - مساعدك الشخصي الذكي</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .pulse-animation {
+            animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-2xl h-full max-h-[850px] flex flex-col glass-panel rounded-2xl overflow-hidden shadow-2xl relative">
+        
+        <!-- Header -->
+        <header class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                    ن
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg">نور</h1>
+                    <p class="text-xs text-green-400 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span> متصل
+                    </p>
+                </div>
+            </div>
+            <button id="settingsBtn" class="text-slate-400 hover:text-white transition">
+                <i class="fas fa-cog text-xl"></i>
+            </button>
+        </header>
+
+        <!-- API Key Modal (Hidden by default) -->
+        <div id="settingsModal" class="absolute inset-0 bg-slate-900/95 z-50 flex flex-col p-6 hidden justify-center">
+            <h2 class="text-2xl font-bold mb-4 text-center">الإعدادات</h2>
+            <p class="text-sm text-slate-400 mb-6 text-center">أدخل مفتاح Gemini API الخاص بك للبدء. يتم حفظ المفتاح في متصفحك فقط.</p>
+            
+            <input type="password" id="apiKeyInput" placeholder="أدخل API Key هنا..." 
+                class="w-full p-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500 mb-4 dir-ltr text-left">
+            
+            <div class="flex gap-3">
+                <button id="saveApiKeyBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition">
+                    حفظ والبدء
+                </button>
+                <button id="closeSettingsBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg font-bold transition">
+                    إلغاء
+                </button>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-40 pointer-events-none">
+            رسالة تنبيه
+        </div>
+
+        <!-- Chat Area -->
+        <main id="chatArea" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            <!-- Messages will be injected here -->
+            <div class="flex gap-3 items-end w-full">
+                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 text-sm">ن</div>
+                <div class="bg-slate-700/80 p-3 rounded-2xl rounded-br-none max-w-[80%] text-sm md:text-base shadow-md">
+                    أهلاً بك! أنا نور، مساعدك الشخصي الذكي. يمكنك التحدث معي بالضغط على زر المايكروفون بالأسفل. كيف يمكنني مساعدتك اليوم؟
+                </div>
+            </div>
+        </main>
+
+        <!-- Controls Area -->
+        <footer class="p-6 border-t border-slate-700 flex flex-col items-center justify-center bg-slate-800/50">
+            
+            <!-- Voice Wave Visualizer (Fake for aesthetics) -->
+            <div id="visualizer" class="flex items-center justify-center gap-1 h-8 mb-4 opacity-0 transition-opacity">
+                <div class="w-1.5 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+                <div class="w-1.5 h-6 bg-blue-400 rounded-full animate-pulse" style="animation-delay: 0.1s"></div>
+                <div class="w-1.5 h-8 bg-blue-400 rounded-full animate-pulse" style="animation-delay: 0.2s"></div>
+                <div class="w-1.5 h-4 bg-blue-400 rounded-full animate-pulse" style="animation-delay: 0.3s"></div>
+                <div class="w-1.5 h-7 bg-blue-400 rounded-full animate-pulse" style="animation-delay: 0.15s"></div>
+            </div>
+
+            <p id="statusText" class="text-slate-400 text-sm mb-4">اضغط للتحدث</p>
+
+            <button id="micBtn" class="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-2xl text-white shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all duration-300">
+                <i class="fas fa-microphone"></i>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let apiKey = localStorage.getItem('gemini_api_key') || '';
+        let chatHistory = [];
+        let isRecording = false;
+        let isSpeaking = false;
+
+        // System prompt to define "Noor"
+        const SYSTEM_PROMPT = "أنت مساعد شخصي ذكي، افتراضي، ولطيف جداً اسمك 'نور'. تتحدث باللغة العربية (يفضل أن تدمج بين الفصحى المبسطة والمصرية لتكون ودوداً). ردودك يجب أن تكون قصيرة، مباشرة، ومفيدة جداً لأنها ستُقرأ صوتياً للمستخدم. لا تستخدم رموزاً تعبيرية بكثرة ولا تستخدم تنسيقات معقدة مثل الجداول أو القوائم الطويلة.";
+
+        // --- DOM Elements ---
+        const micBtn = document.getElementById('micBtn');
+        const statusText = document.getElementById('statusText');
+        const visualizer = document.getElementById('visualizer');
+        const chatArea = document.getElementById('chatArea');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const toast = document.getElementById('toast');
+
+        // --- Utility Functions ---
+        function showToast(message, isError = true) {
+            toast.textContent = message;
+            toast.className = `absolute top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300 z-40 ${isError ? 'bg-red-500' : 'bg-green-500'} text-white`;
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+        }
+
+        function scrollToBottom() {
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function addMessageToUI(text, isUser = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex gap-3 items-end w-full ${isUser ? 'flex-row-reverse' : ''} mb-4`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = `w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm ${isUser ? 'bg-indigo-500' : 'bg-blue-500'}`;
+            avatar.textContent = isUser ? 'أنت' : 'ن';
+
+            const bubble = document.createElement('div');
+            bubble.className = `p-3 rounded-2xl max-w-[80%] text-sm md:text-base shadow-md ${isUser ? 'bg-indigo-600 rounded-bl-none text-white' : 'bg-slate-700/80 rounded-br-none'}`;
+            bubble.textContent = text;
+
+            msgDiv.appendChild(avatar);
+            msgDiv.appendChild(bubble);
+            chatArea.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // --- Settings Management ---
+        settingsBtn.addEventListener('click', () => {
+            apiKeyInput.value = apiKey;
+            settingsModal.classList.remove('hidden');
+        });
+
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+
+        saveApiKeyBtn.addEventListener('click', () => {
+            const val = apiKeyInput.value.trim();
+            if (val) {
+                apiKey = val;
+                localStorage.setItem('gemini_api_key', apiKey);
+                settingsModal.classList.add('hidden');
+                showToast('تم حفظ المفتاح بنجاح', false);
+            } else {
+                showToast('الرجاء إدخال مفتاح صحيح');
+            }
+        });
+
+        // Ensure user has API key on first click
+        function checkApiKey() {
+            if (!apiKey) {
+                settingsModal.classList.remove('hidden');
+                return false;
+            }
+            return true;
+        }
+
+        // --- STREAMING_CHUNK: Speech to Text (Web Speech API) ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ar-EG'; // Arabic - Egypt
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                isRecording = true;
+                micBtn.classList.add('pulse-animation', 'bg-red-500');
+                micBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                micBtn.innerHTML = '<i class="fas fa-stop"></i>';
+                statusText.textContent = "جاري الاستماع...";
+                visualizer.style.opacity = '1';
+                
+                // Stop any ongoing speech output when user starts talking
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                }
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                handleUserVoiceInput(transcript);
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error', event.error);
+                stopRecordingUI();
+                showToast('حدث خطأ في الميكروفون: ' + event.error);
+            };
+
+            recognition.onend = function() {
+                stopRecordingUI();
+            };
+        } else {
+            showToast('متصفحك لا يدعم التعرف على الصوت. الرجاء استخدام Chrome.');
+            micBtn.style.display = 'none';
+        }
+
+        function stopRecordingUI() {
+            isRecording = false;
+            micBtn.classList.remove('pulse-animation', 'bg-red-500');
+            micBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            statusText.textContent = "اضغط للتحدث";
+            visualizer.style.opacity = '0';
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (!checkApiKey()) return;
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        });
+
+        // --- STREAMING_CHUNK: Gemini API Interaction ---
+        async function handleUserVoiceInput(text) {
+            if (!text.trim()) return;
+
+            // 1. Add user message to UI
+            addMessageToUI(text, true);
+
+            // 2. Prepare chat history
+            chatHistory.push({ role: "user", parts: [{ text: text }] });
+
+            statusText.textContent = "نور تفكر...";
+            micBtn.disabled = true;
+            micBtn.style.opacity = '0.5';
+
+            try {
+                const response = await callGeminiAPI(chatHistory);
+                const modelText = response.candidates[0].content.parts[0].text;
+                
+                // 3. Add model response to UI
+                addMessageToUI(modelText, false);
+                
+                // 4. Update history
+                chatHistory.push({ role: "model", parts: [{ text: modelText }] });
+
+                // 5. Speak the response
+                speakText(modelText);
+
+            } catch (error) {
+                console.error(error);
+                showToast('حدث خطأ في الاتصال بالذكاء الاصطناعي.');
+                // Remove the failed user message from history
+                chatHistory.pop();
+            } finally {
+                statusText.textContent = "اضغط للتحدث";
+                micBtn.disabled = false;
+                micBtn.style.opacity = '1';
+            }
+        }
+
+        async function callGeminiAPI(history) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: history,
+                systemInstruction: {
+                    parts: [{ text: SYSTEM_PROMPT }]
+                }
+            };
+
+            // Implement exponential backoff for retries implicitly or just a simple fetch
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error?.message || 'API Error');
+            }
+
+            return await res.json();
+        }
+
+        // --- STREAMING_CHUNK: Text to Speech (Browser Native) ---
+        function speakText(text) {
+            if (!window.speechSynthesis) {
+                console.warn("Speech synthesis not supported");
+                return;
+            }
+
+            // Cancel any current speech
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ar-EG'; // Or 'ar-SA'
+            utterance.rate = 1.0;     // Speed
+            utterance.pitch = 1.1;    // Slightly higher pitch for a friendly tone
+
+            // Optional: Try to find a specific Arabic female voice if available on the device
+            const voices = window.speechSynthesis.getVoices();
+            const arabicVoice = voices.find(v => v.lang.startsWith('ar') && v.name.toLowerCase().includes('female'));
+            if (arabicVoice) {
+                utterance.voice = arabicVoice;
+            }
+
+            utterance.onstart = () => {
+                isSpeaking = true;
+                statusText.textContent = "نور تتحدث...";
+                visualizer.style.opacity = '1';
+            };
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                statusText.textContent = "اضغط للتحدث";
+                visualizer.style.opacity = '0';
+            };
+
+            utterance.onerror = (e) => {
+                console.error("Speech Synthesis Error", e);
+                isSpeaking = false;
+                statusText.textContent = "اضغط للتحدث";
+                visualizer.style.opacity = '0';
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Safari/Chrome sometimes need voices to be loaded first
+        window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.getVoices();
+        };
+
+        // Welcome interaction (optional to ask for mic permission early)
+        window.addEventListener('DOMContentLoaded', () => {
+            if(!apiKey) {
+                setTimeout(() => {
+                    settingsModal.classList.remove('hidden');
+                }, 1000);
+            }
+        });
+
+    </script>
+</body>
+</html>
